@@ -94,7 +94,7 @@ esp_err_t HDC1080::readTemperatureAndHumidity(void) const {
     uint16_t rawTemp = (data[0] << 8) | data[1];
     uint16_t rawHum  = (data[2] << 8) | data[3];
 
-    temperature_ = ((float)rawTemp / 65536.0f) * 165.0f - 40.0f;
+    temperature_ = (((float)rawTemp / 65536.0f) * 165.0f) - 40.0f;
     humidity_ = ((float)rawHum / 65536.0f) * 100.0f;
 
     return ESP_OK;
