@@ -56,24 +56,25 @@ void sensor_task(void *arg)
     ESP_LOGI(TAG, "Iniciando lecturas del sensor...");
     
     while (1) {
-        // Método 1: Leer ambos valores (recomendado para modo secuencial)
-        hdc1080_data_t data = hdc_sensor->readBoth();
-        
-        if (data.valid) {
-            ESP_LOGI(TAG, "Temperatura: %.2f°C | Humedad: %.2f%%", 
-                     data.temperature, data.humidity);
-            
-        } else {
-            ESP_LOGE(TAG, "Datos inválidos del sensor");
-        }
-        
-        /* Método 2: Leer valores individuales
+        // Método 1: Leer valores individuales (más confiable)
         float temperature = hdc_sensor->readTemperature();
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100)); // Pausa entre lecturas
         float humidity = hdc_sensor->readHumidity();
         
         if (temperature != -999.0f && humidity != -999.0f) {
-            ESP_LOGI(TAG, "Individual - Temp: %.2f°C, Hum: %.2f%%", temperature, humidity);
+            ESP_LOGI(TAG, "Temperatura: %.2f°C | Humedad: %.2f%%", 
+                     temperature, humidity);
+            
+        } else {
+            ESP_LOGE(TAG, "Error leyendo datos del sensor");
+        }
+        
+        /* Método 2: Leer ambos valores (modo secuencial - experimental)
+        hdc1080_data_t data = hdc_sensor->readBoth();
+        
+        if (data.valid) {
+            ESP_LOGI(TAG, "Secuencial - Temp: %.2f°C, Hum: %.2f%%", 
+                     data.temperature, data.humidity);
         }
         */
         

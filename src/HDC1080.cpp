@@ -107,23 +107,22 @@ hdc1080_data_t HDC1080::readBoth()
         return result;
     }
 
-    // En modo secuencial del HDC1080, necesitamos:
-    // 1. Escribir el registro de temperatura para iniciar la conversión
-    // 2. Esperar el tiempo de conversión
-    // 3. Leer los 4 bytes (2 de temp + 2 de humedad)
+    // Protocolo correcto del HDC1080 en modo secuencial:
+    // 1. Enviar puntero al registro de temperatura (0x00)
+    // 2. Esperar tiempo de conversión completa
+    // 3. Leer 4 bytes consecutivos (temp high, temp low, hum high, hum low)
     
-    // Paso 1: Iniciar conversión escribiendo la dirección del registro de temperatura
-    uint8_t temp_reg = HDC1080_TEMP_REG;
-    esp_err_t ret = i2c_bus_->write(device_handle_, temp_reg, nullptr, 0);
+    uint8_t reg_addr = HDC1080_TEMP_REG;
+    esp_err_t ret = i2c_bus_->read(device_handle_, reg_addr, nullptr, 0, 15000); // Solo enviar dirección
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error iniciando conversión: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Error apuntando al registro de temperatura: %s", esp_err_to_name(ret));
         return result;
     }
     
-    // Paso 2: Esperar tiempo de conversión (14ms para ambas mediciones)
+    // Esperar el tiempo completo de conversión (temperatura + humedad)
     vTaskDelay(pdMS_TO_TICKS(15));
     
-    // Paso 3: Leer los 4 bytes usando readStream (sin especificar registro)
+    // Leer los 4 bytes de datos
     uint8_t data[4];
     ret = i2c_bus_->readStream(device_handle_, data, 4);
     
@@ -156,27 +155,19 @@ float HDC1080::readTemperature()
         return -999.0f;
     }
 
-    // Iniciar conversión de temperatura
-    uint8_t temp_reg = HDC1080_TEMP_REG;
-    esp_err_t ret = i2c_bus_->write(device_handle_, temp_reg, nullptr, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error iniciando conversión de temperatura: %s", esp_err_to_name(ret));
-        return -999.0f;
-    }
-    
-    // Esperar tiempo de conversión (6.5ms para temperatura)
-    vTaskDelay(pdMS_TO_TICKS(7));
-    
-    // Leer resultado
+    // Usar el método estándar de tu librería I2C que ya funciona
     uint8_t data[2];
-    ret = i2c_bus_->readStream(device_handle_, data, 2);
-    if (ret != ESP_OK) {
+    esp_err_t ret = i2c_bus_->read(device_handle_, HDC1080_TEMP_REG, data, 2, 15000);
+    
+    if (ret == ESP_OK) {
+        uint16_t raw_temp = (data[0] << 8) | data[1];
+        ESP_LOGD(TAG, "Temp raw: 0x%04X (%d), bytes: [0x%02X, 0x%02X]", 
+                 raw_temp, raw_temp, data[0], data[1]);
+        return convertRawTemperature(raw_temp);
+    } else {
         ESP_LOGE(TAG, "Error leyendo temperatura: %s", esp_err_to_name(ret));
         return -999.0f;
     }
-    
-    uint16_t raw_temp = (data[0] << 8) | data[1];
-    return convertRawTemperature(raw_temp);
 }
 
 float HDC1080::readHumidity()
@@ -186,27 +177,19 @@ float HDC1080::readHumidity()
         return -999.0f;
     }
 
-    // Iniciar conversión de humedad
-    uint8_t hum_reg = HDC1080_HUMIDITY_REG;
-    esp_err_t ret = i2c_bus_->write(device_handle_, hum_reg, nullptr, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error iniciando conversión de humedad: %s", esp_err_to_name(ret));
-        return -999.0f;
-    }
-    
-    // Esperar tiempo de conversión (6.35ms para humedad)
-    vTaskDelay(pdMS_TO_TICKS(7));
-    
-    // Leer resultado
+    // Usar el método estándar de tu librería I2C que ya funciona
     uint8_t data[2];
-    ret = i2c_bus_->readStream(device_handle_, data, 2);
-    if (ret != ESP_OK) {
+    esp_err_t ret = i2c_bus_->read(device_handle_, HDC1080_HUMIDITY_REG, data, 2, 15000);
+    
+    if (ret == ESP_OK) {
+        uint16_t raw_humidity = (data[0] << 8) | data[1];
+        ESP_LOGD(TAG, "Hum raw: 0x%04X (%d), bytes: [0x%02X, 0x%02X]", 
+                 raw_humidity, raw_humidity, data[0], data[1]);
+        return convertRawHumidity(raw_humidity);
+    } else {
         ESP_LOGE(TAG, "Error leyendo humedad: %s", esp_err_to_name(ret));
         return -999.0f;
     }
-    
-    uint16_t raw_humidity = (data[0] << 8) | data[1];
-    return convertRawHumidity(raw_humidity);
 }
 
 uint16_t HDC1080::getManufacturerID()
