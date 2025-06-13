@@ -1,77 +1,27 @@
-// #include "HDC1080.h"
-// #include "power_sense.hpp"
-// #include "freertos/FreeRTOS.h"
-// #include "freertos/task.h"
-// #include "esp_log.h"
-// #include "driver/i2c.h"
-// #include "esp_system.h"
-// #include "esp_sleep.h"
-// #include "soc/rtc.h"
-
 // /* Pin out del mini brain: 
 // REED: GPIO17
 // LED: GPIO38
 // HDC1080: GPIO5 (SDA), GPIO4 (SCL) 
 // */
-// static const char *TAG = "MAIN";
-// extern "C" void app_main() {
-
-// }
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
-#include "esp_check.h"
-#include "driver/gpio.h"
-#include "driver/i2c_master.h"
-#include "HDC1080.h"
-
-#define I2C_MASTER_SCL_IO          4
-#define I2C_MASTER_SDA_IO          5
-#define I2C_MASTER_NUM             I2C_NUM_0
-#define I2C_MASTER_FREQ_HZ         100000
-#define I2C_MASTER_TX_BUF_DISABLE  0
-#define I2C_MASTER_RX_BUF_DISABLE  0
-
-#define TAG "MAIN"
-
-HDC1080 hdc1080(I2C_MASTER_NUM, 0x40);
-
-static esp_err_t i2c_master_init() {
-    i2c_config_t conf;
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = I2C_MASTER_SDA_IO;
-    conf.scl_io_num = I2C_MASTER_SCL_IO;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
-    conf.clk_flags = 0;  // Recommended for ESP32-S3
-
-    esp_err_t err = i2c_param_config(I2C_MASTER_NUM, &conf);
-    if (err != ESP_OK) return err;
-
-    return i2c_driver_install(I2C_MASTER_NUM, conf.mode,
-                              I2C_MASTER_RX_BUF_DISABLE,
-                              I2C_MASTER_TX_BUF_DISABLE, 0);
-}
+#include "HDC1080.hpp"
+#include "smart_sensor_sense.hpp"
 
 extern "C" void app_main() {
-    ESP_ERROR_CHECK(i2c_master_init());
-    vTaskDelay(pdMS_TO_TICKS(500));
-    ESP_ERROR_CHECK(hdc1080.init());
-    vTaskDelay(pdMS_TO_TICKS(500));
+    I2C i2c(I2C_NUM_0, GPIO_NUM_5, GPIO_NUM_4, 100000, true);
+    i2c.init();
 
-    ESP_LOGI(TAG, "Manufacturer ID: 0x%04X", hdc1080.readManufacturerId());
-    ESP_LOGI(TAG, "Device ID: 0x%04X", hdc1080.readDeviceId());
-
-    HDC1080_SerialNumber sn = hdc1080.readSerialNumber();
-    ESP_LOGI(TAG, "Serial Number: %04X-%04X-%04X", sn.serialFirst, sn.serialMid, sn.serialLast);
+    HDC1080 hdc(&i2c);
+    hdc.init();
 
     while (true) {
-        double temp = hdc1080.readTemperature();
-        double hum = hdc1080.readHumidity();
-        ESP_LOGI(TAG, "Temperature: %.2f C", temp);
-        ESP_LOGI(TAG, "Humidity: %.2f %%", hum);
+        float temp = 0, hum = 0;
+        if (hdc.readTemperature(&temp) == ESP_OK &&
+            hdc.readHumidity(&hum) == ESP_OK) {
+            printf("T: %.2f °C, H: %.2f %%\n", temp, hum);
+        } else {
+            printf("Error leyendo HDC1080\n");
+        }
+
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
