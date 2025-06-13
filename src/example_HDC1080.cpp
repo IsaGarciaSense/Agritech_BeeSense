@@ -2,91 +2,40 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "smart_sensor_sense.hpp"
 #include "HDC1080.hpp"
+#include "smart_sensor_sense.hpp"
 
-static const char *TAG = "HDC1080_EXAMPLE";
+#define TAG "HDC1080_MAIN"
+constexpr gpio_num_t SDA_PIN = GPIO_NUM_5;
+constexpr gpio_num_t SCL_PIN = GPIO_NUM_4;
 
-// Configuración I2C
-#define I2C_SDA_PIN     GPIO_NUM_5
-#define I2C_SCL_PIN     GPIO_NUM_4
-#define I2C_PORT        I2C_NUM_0
+I2C i2c(I2C_NUM_0, SDA_PIN, SCL_PIN, true);
 
-// Variables globales
-I2C* i2c_bus = nullptr;
-HDC1080* hdc_sensor = nullptr;
+extern "C" void app_main(void) {
+    ESP_LOGI(TAG, "Starting HDC1080 Test...");
+    HDC1080 sensor(i2c);
 
-void sensor_task(void *arg)
-{
-    // Crear instancia del bus I2C
-    i2c_bus = new I2C(I2C_PORT, I2C_SDA_PIN, I2C_SCL_PIN, true);
-    
-    // Inicializar el bus I2C
-    esp_err_t ret = i2c_bus->init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error inicializando I2C: %s", esp_err_to_name(ret));
+    esp_err_t err = i2c.init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init I2C: %s", esp_err_to_name(err));
         return;
     }
-    ESP_LOGI(TAG, "Bus I2C inicializado correctamente");
-    
-    // Crear instancia del sensor HDC1080
-    hdc_sensor = new HDC1080(i2c_bus);
-    
-    // Configuración personalizada (opcional)
-    hdc1080_config_t config = {
-        .sequential_mode = true,        // Leer temp y humedad juntos
-        .temp_resolution_14bit = true,  // Máxima resolución temperatura
-        .hum_resolution_14bit = true,   // Máxima resolución humedad
-        .heater_enable = false          // Calentador deshabilitado
-    };
-    
-    // Inicializar el sensor
-    ret = hdc_sensor->init(&config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Error inicializando HDC1080: %s", esp_err_to_name(ret));
+
+    err = sensor.init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Sensor init failed: %s", esp_err_to_name(err));
         return;
     }
-    
-    // Obtener información del dispositivo
-    uint16_t serial_1, serial_2, serial_3;
-    if (hdc_sensor->getSerialNumbers(&serial_1, &serial_2, &serial_3) == ESP_OK) {
-        ESP_LOGI(TAG, "Números de serie: 0x%04X, 0x%04X, 0x%04X", serial_1, serial_2, serial_3);
-    }
-    
-    ESP_LOGI(TAG, "Iniciando lecturas del sensor...");
-    
+
+    char report[100];
     while (1) {
-        // Método 1: Leer valores individuales (más confiable)
-        float temperature = hdc_sensor->readTemperature();
-        vTaskDelay(pdMS_TO_TICKS(100)); // Pausa entre lecturas
-        float humidity = hdc_sensor->readHumidity();
-        
-        if (temperature != -999.0f && humidity != -999.0f) {
-            ESP_LOGI(TAG, "Temperatura: %.2f°C | Humedad: %.2f%%", 
-                     temperature, humidity);
-            
-        } else {
-            ESP_LOGE(TAG, "Error leyendo datos del sensor");
+        err = sensor.measure();
+        if (err == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            if (sensor.getReport(report) == ESP_OK) {
+                ESP_LOGI(TAG, "%s", report);
+            }
         }
-        
-        /* Método 2: Leer ambos valores (modo secuencial - experimental)
-        hdc1080_data_t data = hdc_sensor->readBoth();
-        
-        if (data.valid) {
-            ESP_LOGI(TAG, "Secuencial - Temp: %.2f°C, Hum: %.2f%%", 
-                     data.temperature, data.humidity);
-        }
-        */
-        
-        vTaskDelay(pdMS_TO_TICKS(3000)); // Leer cada 3 segundos
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
-}
-
-extern "C" void app_main()
-{
-    ESP_LOGI(TAG, "=== HDC1080 Library Example ===");
-    ESP_LOGI(TAG, "Sensor de temperatura y humedad de alta precisión");
-    
-    // Crear tarea del sensor
-    xTaskCreate(sensor_task, "sensor_task", 4096, NULL, 5, NULL);
 }
